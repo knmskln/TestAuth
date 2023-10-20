@@ -1,27 +1,43 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using TestAuth.Entities;
+using TestAuth.Models;
+using TestAuth.Services;
 
 namespace TestAuth.Controllers;
 
 [ApiController]
-[Route("[controller]")]
+[Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
+    private readonly IAuthService _authenticationService;
 
-    private readonly ILogger<AuthController> _logger;
-
-    public AuthController(ILogger<AuthController> logger)
+    public AuthController(IAuthService authenticationService)
     {
-        _logger = logger;
+        _authenticationService = authenticationService;
     }
 
-    [HttpGet(Name = "GetUsers")]
-    public IEnumerable<User> Get()
+    [AllowAnonymous]
+    [HttpPost("login")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(string))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Login([FromBody] AuthenticateRequest request)
     {
-        return Enumerable.Range(1, 5).Select(index => new User
-            {
-                RegistrationDate = DateTime.Now,
-            })
-            .ToArray();
+        var response = await _authenticationService.Login(request);
+
+        return Ok(response);
     }
+
+    [AllowAnonymous]
+    [HttpPost("register")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(string))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    {
+        var response = await _authenticationService.Register(request);
+
+        return Ok(response);
+    }
+   
 }
