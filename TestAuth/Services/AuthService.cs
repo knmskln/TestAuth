@@ -137,11 +137,9 @@ public class AuthService : IAuthService
         {
             connection.Open();
 
-            string sql = "SELECT permissionid FROM userpermissions WHERE userid = @Id;";
-
-            using (var command = new NpgsqlCommand(sql, connection))
+            using (var command = new NpgsqlCommand("SELECT * FROM get_permission_ids_for_user(@userId)", connection))
             {
-                command.Parameters.AddWithValue("Id", userId);
+                command.Parameters.AddWithValue("userId", userId);
 
                 using (var reader = command.ExecuteReader())
                 {
@@ -149,7 +147,6 @@ public class AuthService : IAuthService
                     {
                         int permissionId = reader.GetInt32(0);
                         permissionIds.Add(permissionId);
-                        Console.WriteLine(permissionIds);
                     }
                 }
             }

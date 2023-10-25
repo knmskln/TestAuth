@@ -25,6 +25,7 @@ builder.Services.AddAuthorization(options =>
         policy.Requirements.Add(new PermissionRequirement("2"));
     });
 });
+
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
 // 3. Adding Authentication
 builder.Services.AddAuthentication(options =>
@@ -33,8 +34,6 @@ builder.Services.AddAuthentication(options =>
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-
-// 4. Adding Jwt Bearer
     .AddJwtBearer(options =>
     {
         options.SaveToken = true;
@@ -45,6 +44,7 @@ builder.Services.AddAuthentication(options =>
             ValidateAudience = true,
             ValidAudience = configuration["JWT:ValidAudience"],
             ValidIssuer = configuration["JWT:ValidIssuer"],
+            ClockSkew = TimeSpan.Zero,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JWT:Secret"]))
         };
     });
@@ -55,7 +55,7 @@ builder.Services.AddEndpointsApiExplorer();
 // 5. Swagger authentication
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Wedding Planner API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = @"JWT Authorization header using the Bearer scheme. Example: 'Bearer 12345abcdef'",
