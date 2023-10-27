@@ -20,7 +20,7 @@ public class WeatherForecastController : ControllerBase
     }
     
     [HttpGet(Name = "GetWeatherForecast")]
-    [Authorize(Policy = "GetWeather")]
+    [Authorize(Policy = "AddCar")]
     public IEnumerable<WeatherForecast> Get()
     {
         return Enumerable.Range(1, 5).Select(index => new WeatherForecast
@@ -33,7 +33,7 @@ public class WeatherForecastController : ControllerBase
     }
 
     [HttpGet("AnotherAction", Name = "GetAnotherAction")]
-    [Authorize(Policy = "AnotherPolicy")]
+    [Authorize(Policy = "GetCar")]
     public IEnumerable<WeatherForecast> GetAnotherAction()
     {
         return Enumerable.Range(1, 2).Select(index => new WeatherForecast

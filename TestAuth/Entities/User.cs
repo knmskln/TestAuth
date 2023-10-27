@@ -16,4 +16,6 @@ public class User
     public string Patronymic { get; set; }
     public string Phone { get; set; }
     public string Address { get; set; }
+    public string Token { get; set; }
+    public int GroupId { get; set; }
 }

@@ -38,12 +38,10 @@ public class AuthService : IAuthService
         var passwordHash = HashPassword(request.Password);
 
         using var insertUserCommand = new NpgsqlCommand(
-            "INSERT INTO users (id, login, password_hash, surname, name, patronymic, address, phone, registration_date, password_setting_date) " +
-            "VALUES (@Id, @Login, @PasswordHash, @Surname, @Name, @Patronymic, @Address, @Phone, @RegistrationDate, @PasswordSettingDate)",
+            "INSERT INTO users (login, password, surname, name, patronymic, address, phone, registration_date, password_setting_date, group_id) " +
+            "VALUES (@Login, @PasswordHash, @Surname, @Name, @Patronymic, @Address, @Phone, @RegistrationDate, @PasswordSettingDate, @GroupId)",
             connection);
 
-        var userId = Guid.NewGuid();
-        insertUserCommand.Parameters.AddWithValue("Id", userId);
         insertUserCommand.Parameters.AddWithValue("Login", request.Login);
         insertUserCommand.Parameters.AddWithValue("PasswordHash", passwordHash);
         insertUserCommand.Parameters.AddWithValue("Surname", request.Surname);
@@ -53,7 +51,9 @@ public class AuthService : IAuthService
         insertUserCommand.Parameters.AddWithValue("Phone", request.Phone);
         insertUserCommand.Parameters.AddWithValue("RegistrationDate", DateTime.Now);
         insertUserCommand.Parameters.AddWithValue("PasswordSettingDate", DateTime.Now);
+        insertUserCommand.Parameters.AddWithValue("GroupId", 2);
 
+        
         await insertUserCommand.ExecuteNonQueryAsync();
 
         return await Login(new AuthenticateRequest { Login = request.Login, Password = request.Password });
@@ -65,16 +65,15 @@ public class AuthService : IAuthService
         await connection.OpenAsync();
 
         using var findUserCommand =
-            new NpgsqlCommand("SELECT id, login, password_hash FROM users WHERE login = @Login", connection);
+            new NpgsqlCommand("SELECT id, password FROM users WHERE login = @Login", connection);
         findUserCommand.Parameters.AddWithValue("Login", request.Login);
 
         using var reader = await findUserCommand.ExecuteReaderAsync();
         if (reader.Read())
         {
-            var userId = reader.GetGuid(0);
-            var login = reader.GetString(1);
-            var passwordHash = reader.GetString(2);
-            
+            var userId = reader.GetInt32(0);
+            var passwordHash = reader.GetString(1);
+
             var userPermissions = GetPermissionIdsForUser(userId);
 
             if (VerifyPassword(request.Password, passwordHash))
@@ -82,7 +81,6 @@ public class AuthService : IAuthService
                 var authClaims = new List<Claim>
                 {
                     new(JwtRegisteredClaimNames.Sub, userId.ToString()),
-                    new(JwtRegisteredClaimNames.Exp, $"{new DateTimeOffset(DateTime.Now.AddHours(3)).ToUnixTimeSeconds()}"),
                     new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
                 };
 
@@ -94,12 +92,11 @@ public class AuthService : IAuthService
                 var token = GetToken(authClaims);
                 return new JwtSecurityTokenHandler().WriteToken(token);
             }
-
         }
 
         throw new ArgumentException($"Unable to authenticate user {request.Login}");
     }
-    
+
     private JwtSecurityToken GetToken(IEnumerable<Claim> authClaims)
     {
         var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"]));
@@ -128,31 +125,38 @@ public class AuthService : IAuthService
         var hashedInputPassword = HashPassword(inputPassword);
         return string.Equals(hashedInputPassword, hashedPassword, StringComparison.OrdinalIgnoreCase);
     }
-    
-    public List<int> GetPermissionIdsForUser(Guid userId)
-    {
-        List<int> permissionIds = new List<int>();
 
+    public List<int> GetPermissionIdsForUser(int userId)
+    {
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             connection.Open();
 
-            using (var command = new NpgsqlCommand("SELECT * FROM get_permission_ids_for_user(@userId)", connection))
+            using (var getGroupIdCommand =
+                   new NpgsqlCommand("SELECT group_id FROM users WHERE id = @UserId", connection))
             {
-                command.Parameters.AddWithValue("userId", userId);
+                getGroupIdCommand.Parameters.AddWithValue("UserId", userId);
+                int groupId = (int)getGroupIdCommand.ExecuteScalar();
 
-                using (var reader = command.ExecuteReader())
+                using (var getPermissionsCommand =
+                       new NpgsqlCommand("SELECT permission_id FROM groups_permissions WHERE group_id = @GroupId",
+                           connection))
                 {
-                    while (reader.Read())
+                    getPermissionsCommand.Parameters.AddWithValue("GroupId", groupId);
+
+                    List<int> permissions = new List<int>();
+                    using (var reader = getPermissionsCommand.ExecuteReader())
                     {
-                        int permissionId = reader.GetInt32(0);
-                        permissionIds.Add(permissionId);
+                        while (reader.Read())
+                        {
+                            int permissionId = reader.GetInt32(0);
+                            permissions.Add(permissionId);
+                        }
                     }
+
+                    return permissions;
                 }
             }
         }
-
-        return permissionIds;
     }
-
 }
