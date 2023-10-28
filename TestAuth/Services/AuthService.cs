@@ -36,7 +36,7 @@ public class AuthService : IAuthService
             throw new ArgumentException($"User with username {request.Login} already exists.");
         }
 
-        var passwordHash = HashPassword(request.Password);
+        var passwordHash = HashPassword(request.Login, request.Password);
 
         using var insertUserCommand = new NpgsqlCommand(
             "INSERT INTO users (login, password, surname, name, patronymic, address, phone, registration_date, password_setting_date, group_id) " +
@@ -77,7 +77,7 @@ public class AuthService : IAuthService
 
             var userPermissions = GetPermissionIdsForUser(userId);
 
-            if (VerifyPassword(request.Password, passwordHash))
+            if (VerifyPassword(request.Login, request.Password, passwordHash))
             {
                 var authClaims = new List<Claim>
                 {
@@ -97,7 +97,7 @@ public class AuthService : IAuthService
             }
         }
 
-        throw new ArgumentException($"Unable to authenticate user {request.Login}");
+        return null;
     }
 
     private JwtSecurityToken GetToken(IEnumerable<Claim> authClaims)
@@ -150,12 +150,29 @@ public class AuthService : IAuthService
             var newRefreshToken = GenerateRefreshToken();
 
             SaveRefreshTokenToDatabase(userId, newRefreshToken);
-
+            
+            RemoveRefreshTokenFromDatabase(refreshTokenRequest.RefreshToken);
+            
             return new AuthenticateResponse(userId, new JwtSecurityTokenHandler().WriteToken(newToken),
                 newRefreshToken);
         }
 
-        throw new ArgumentException("Refresh token is revoked or expired");
+        return null;
+    }
+
+    public void RevokeToken(RevokeTokenRequest revokeTokenRequest)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var updateTokenCommand = new NpgsqlCommand(
+            "UPDATE refresh_tokens SET revoked = @Revoked WHERE token = @Token",
+            connection);
+
+        updateTokenCommand.Parameters.AddWithValue("Revoked", DateTime.UtcNow);
+        updateTokenCommand.Parameters.AddWithValue("Token", revokeTokenRequest.RefreshToken);
+
+        updateTokenCommand.ExecuteNonQuery();    
     }
 
     private bool IsValidRefreshToken(string refreshToken)
@@ -181,32 +198,36 @@ public class AuthService : IAuthService
 
         return false;
     }
-    
+
     private int GetUserIdFromRefreshToken(string refreshToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         connection.Open();
 
-        using var getUserIdCommand = new NpgsqlCommand("SELECT user_id FROM refresh_tokens WHERE token = @Token", connection);
+        using var getUserIdCommand =
+            new NpgsqlCommand("SELECT user_id FROM refresh_tokens WHERE token = @Token", connection);
         getUserIdCommand.Parameters.AddWithValue("Token", refreshToken);
 
         var userId = (int)getUserIdCommand.ExecuteScalar();
 
         return userId;
     }
-    
-    private string HashPassword(string password)
+
+    private string HashPassword(string login, string password)
     {
-        var salt = "SomeRandomSalt";
-        var passwordWithSalt = password + salt;
-        var sha256 = SHA256.Create();
-        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(passwordWithSalt));
-        return BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
+        string combinedString = login + password;
+    
+        using (SHA256 sha256 = SHA256.Create())
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(combinedString);
+            byte[] hashedBytes = sha256.ComputeHash(bytes);
+            return BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
+        }
     }
 
-    private bool VerifyPassword(string inputPassword, string hashedPassword)
+    private bool VerifyPassword(string login, string inputPassword, string hashedPassword)
     {
-        var hashedInputPassword = HashPassword(inputPassword);
+        var hashedInputPassword = HashPassword(login, inputPassword);
         return string.Equals(hashedInputPassword, hashedPassword, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -258,5 +279,19 @@ public class AuthService : IAuthService
         insertRefreshTokenCommand.Parameters.AddWithValue("Expires", refreshToken.Expires);
 
         insertRefreshTokenCommand.ExecuteNonQuery();
+    }
+    
+    private void RemoveRefreshTokenFromDatabase(string oldToken)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var removeRefreshTokenCommand = new NpgsqlCommand(
+            "DELETE FROM refresh_tokens WHERE token = @Token",
+            connection);
+
+        removeRefreshTokenCommand.Parameters.AddWithValue("Token", oldToken);
+
+        removeRefreshTokenCommand.ExecuteNonQuery();
     }
 }
