@@ -40,4 +40,20 @@ public class AuthController : ControllerBase
         return Ok(response);
     }
    
+    [AllowAnonymous]
+    [HttpPost("refresh-token")]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(AuthenticateResponse))]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest refreshTokenRequest)
+    {
+        var response = await _authenticationService.RefreshToken(refreshTokenRequest);
+
+        if (response == null)
+        {
+            return BadRequest("Invalid Refresh Token");
+        }
+
+        return Ok(response);
+    }
 }

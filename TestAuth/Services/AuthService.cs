@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using TestAuth.Entities;
 using TestAuth.Models;
 using JwtRegisteredClaimNames = Microsoft.IdentityModel.JsonWebTokens.JwtRegisteredClaimNames;
 
@@ -20,7 +21,7 @@ public class AuthService : IAuthService
         _connectionString = _configuration.GetConnectionString("db");
     }
 
-    public async Task<string> Register(RegisterRequest request)
+    public async Task<AuthenticateResponse> Register(RegisterRequest request)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -53,13 +54,13 @@ public class AuthService : IAuthService
         insertUserCommand.Parameters.AddWithValue("PasswordSettingDate", DateTime.Now);
         insertUserCommand.Parameters.AddWithValue("GroupId", 2);
 
-        
+
         await insertUserCommand.ExecuteNonQueryAsync();
 
         return await Login(new AuthenticateRequest { Login = request.Login, Password = request.Password });
     }
 
-    public async Task<string> Login(AuthenticateRequest request)
+    public async Task<AuthenticateResponse> Login(AuthenticateRequest request)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -90,7 +91,9 @@ public class AuthService : IAuthService
                 }
 
                 var token = GetToken(authClaims);
-                return new JwtSecurityTokenHandler().WriteToken(token);
+                var refreshToken = GenerateRefreshToken();
+                SaveRefreshTokenToDatabase(userId, refreshToken);
+                return new AuthenticateResponse(userId, new JwtSecurityTokenHandler().WriteToken(token), refreshToken);
             }
         }
 
@@ -111,6 +114,87 @@ public class AuthService : IAuthService
         return token;
     }
 
+    private RefreshToken GenerateRefreshToken()
+    {
+        var refreshToken = new RefreshToken
+        {
+            Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(64)),
+            Expires = DateTime.UtcNow.AddDays(7)
+        };
+
+        return refreshToken;
+    }
+
+    public async Task<AuthenticateResponse> RefreshToken(RefreshTokenRequest refreshTokenRequest)
+    {
+        var isValid = IsValidRefreshToken(refreshTokenRequest.RefreshToken);
+
+        if (isValid)
+        {
+            var userId = GetUserIdFromRefreshToken(refreshTokenRequest.RefreshToken);
+            var userPermissions = GetPermissionIdsForUser(userId);
+
+            var authClaims = new List<Claim>
+            {
+                new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            foreach (var permission in userPermissions)
+            {
+                authClaims.Add(new Claim("permission", permission.ToString()));
+            }
+
+            var newToken = GetToken(authClaims);
+
+            var newRefreshToken = GenerateRefreshToken();
+
+            SaveRefreshTokenToDatabase(userId, newRefreshToken);
+
+            return new AuthenticateResponse(userId, new JwtSecurityTokenHandler().WriteToken(newToken),
+                newRefreshToken);
+        }
+
+        throw new ArgumentException("Refresh token is revoked or expired");
+    }
+
+    private bool IsValidRefreshToken(string refreshToken)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var findRefreshTokenCommand =
+            new NpgsqlCommand("SELECT expires, revoked FROM refresh_tokens WHERE token = @RefreshToken", connection);
+        findRefreshTokenCommand.Parameters.AddWithValue("RefreshToken", refreshToken);
+
+        using var reader = findRefreshTokenCommand.ExecuteReader();
+        if (reader.Read())
+        {
+            var expires = reader.GetDateTime(0);
+            var revoked = reader.IsDBNull(1) ? (DateTime?)null : reader.GetDateTime(1);
+
+            if (revoked == null && expires > DateTime.UtcNow)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    
+    private int GetUserIdFromRefreshToken(string refreshToken)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var getUserIdCommand = new NpgsqlCommand("SELECT user_id FROM refresh_tokens WHERE token = @Token", connection);
+        getUserIdCommand.Parameters.AddWithValue("Token", refreshToken);
+
+        var userId = (int)getUserIdCommand.ExecuteScalar();
+
+        return userId;
+    }
+    
     private string HashPassword(string password)
     {
         var salt = "SomeRandomSalt";
@@ -158,5 +242,21 @@ public class AuthService : IAuthService
                 }
             }
         }
+    }
+
+    private void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var insertRefreshTokenCommand = new NpgsqlCommand(
+            "INSERT INTO refresh_tokens (user_id, token, expires) VALUES (@UserId, @Token, @Expires)",
+            connection);
+
+        insertRefreshTokenCommand.Parameters.AddWithValue("UserId", userId);
+        insertRefreshTokenCommand.Parameters.AddWithValue("Token", refreshToken.Token);
+        insertRefreshTokenCommand.Parameters.AddWithValue("Expires", refreshToken.Expires);
+
+        insertRefreshTokenCommand.ExecuteNonQuery();
     }
 }

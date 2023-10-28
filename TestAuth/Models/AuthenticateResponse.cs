@@ -4,10 +4,14 @@ namespace TestAuth.Models;
 
 public class AuthenticateResponse
 {
-    public int Id { get; set; }
-
-    public AuthenticateResponse(User user, string token)
+    public int UserId { get; set; }
+    public string Token { get; set; }
+    public RefreshToken RefreshToken { get; set; }
+    
+    public AuthenticateResponse(int userId, string token, RefreshToken refreshToken)
     {
-        Id = user.Id;
+        UserId = userId;
+        Token = token;
+        RefreshToken = refreshToken;
     }
 }
