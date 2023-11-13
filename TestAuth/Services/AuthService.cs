@@ -39,8 +39,8 @@ public class AuthService : IAuthService
         var passwordHash = HashPassword(request.Login, request.Password);
 
         using var insertUserCommand = new NpgsqlCommand(
-            "INSERT INTO users (login, password, surname, name, patronymic, address, phone, registration_date, password_setting_date, group_id) " +
-            "VALUES (@Login, @PasswordHash, @Surname, @Name, @Patronymic, @Address, @Phone, @RegistrationDate, @PasswordSettingDate, @GroupId)",
+            "INSERT INTO users (login, password, surname, name, patronymic, address, phone, registration_date, password_updated, email, is_blocked) " +
+            "VALUES (@Login, @PasswordHash, @Surname, @Name, @Patronymic, @Address, @Phone, @RegistrationDate, @PasswordUpdated, @Email, @IsBlocked)",
             connection);
 
         insertUserCommand.Parameters.AddWithValue("Login", request.Login);
@@ -51,8 +51,9 @@ public class AuthService : IAuthService
         insertUserCommand.Parameters.AddWithValue("Address", request.Address);
         insertUserCommand.Parameters.AddWithValue("Phone", request.Phone);
         insertUserCommand.Parameters.AddWithValue("RegistrationDate", DateTime.Now);
-        insertUserCommand.Parameters.AddWithValue("PasswordSettingDate", DateTime.Now);
-        insertUserCommand.Parameters.AddWithValue("GroupId", 2);
+        insertUserCommand.Parameters.AddWithValue("PasswordUpdated", DateTime.Now);
+        insertUserCommand.Parameters.AddWithValue("Email", request.Email);
+        insertUserCommand.Parameters.AddWithValue("IsBlocked", false);
 
 
         await insertUserCommand.ExecuteNonQueryAsync();
@@ -107,7 +108,7 @@ public class AuthService : IAuthService
         var token = new JwtSecurityToken(
             issuer: _configuration["JWT:ValidIssuer"],
             audience: _configuration["JWT:ValidAudience"],
-            expires: DateTime.Now.AddHours(3),
+            expires: DateTime.Now.AddMinutes(15),
             claims: authClaims,
             signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256));
 
@@ -150,29 +151,14 @@ public class AuthService : IAuthService
             var newRefreshToken = GenerateRefreshToken();
 
             SaveRefreshTokenToDatabase(userId, newRefreshToken);
-            
+
             RemoveRefreshTokenFromDatabase(refreshTokenRequest.RefreshToken);
-            
+
             return new AuthenticateResponse(userId, new JwtSecurityTokenHandler().WriteToken(newToken),
                 newRefreshToken);
         }
 
         return null;
-    }
-
-    public void RevokeToken(RevokeTokenRequest revokeTokenRequest)
-    {
-        using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
-
-        using var updateTokenCommand = new NpgsqlCommand(
-            "UPDATE refresh_tokens SET revoked = @Revoked WHERE token = @Token",
-            connection);
-
-        updateTokenCommand.Parameters.AddWithValue("Revoked", DateTime.UtcNow);
-        updateTokenCommand.Parameters.AddWithValue("Token", revokeTokenRequest.RefreshToken);
-
-        updateTokenCommand.ExecuteNonQuery();    
     }
 
     private bool IsValidRefreshToken(string refreshToken)
@@ -181,16 +167,14 @@ public class AuthService : IAuthService
         connection.Open();
 
         using var findRefreshTokenCommand =
-            new NpgsqlCommand("SELECT expires, revoked FROM refresh_tokens WHERE token = @RefreshToken", connection);
+            new NpgsqlCommand("SELECT expires FROM refresh_tokens WHERE refresh_token = @RefreshToken", connection);
         findRefreshTokenCommand.Parameters.AddWithValue("RefreshToken", refreshToken);
 
         using var reader = findRefreshTokenCommand.ExecuteReader();
         if (reader.Read())
         {
             var expires = reader.GetDateTime(0);
-            var revoked = reader.IsDBNull(1) ? (DateTime?)null : reader.GetDateTime(1);
-
-            if (revoked == null && expires > DateTime.UtcNow)
+            if (expires > DateTime.UtcNow)
             {
                 return true;
             }
@@ -205,7 +189,7 @@ public class AuthService : IAuthService
         connection.Open();
 
         using var getUserIdCommand =
-            new NpgsqlCommand("SELECT user_id FROM refresh_tokens WHERE token = @Token", connection);
+            new NpgsqlCommand("SELECT user_id FROM refresh_tokens WHERE refresh_token = @Token", connection);
         getUserIdCommand.Parameters.AddWithValue("Token", refreshToken);
 
         var userId = (int)getUserIdCommand.ExecuteScalar();
@@ -216,7 +200,7 @@ public class AuthService : IAuthService
     private string HashPassword(string login, string password)
     {
         string combinedString = login + password;
-    
+
         using (SHA256 sha256 = SHA256.Create())
         {
             byte[] bytes = Encoding.UTF8.GetBytes(combinedString);
@@ -237,20 +221,48 @@ public class AuthService : IAuthService
         {
             connection.Open();
 
-            using (var getGroupIdCommand =
-                   new NpgsqlCommand("SELECT group_id FROM users WHERE id = @UserId", connection))
+            using (var getGroupIdsCommand =
+                   new NpgsqlCommand("SELECT group_id FROM user_groups WHERE user_id = @UserId", connection))
             {
-                getGroupIdCommand.Parameters.AddWithValue("UserId", userId);
-                int groupId = (int)getGroupIdCommand.ExecuteScalar();
+                getGroupIdsCommand.Parameters.AddWithValue("UserId", userId);
 
-                using (var getPermissionsCommand =
-                       new NpgsqlCommand("SELECT permission_id FROM groups_permissions WHERE group_id = @GroupId",
+                List<int> groupIds = new List<int>();
+                using (var reader = getGroupIdsCommand.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        int groupId = reader.GetInt32(0);
+                        groupIds.Add(groupId);
+                    }
+                }
+
+                List<int> permissions = new List<int>();
+                foreach (var groupId in groupIds)
+                {
+                    using (var getPermissionsCommand =
+                           new NpgsqlCommand("SELECT permission_id FROM group_permissions WHERE group_id = @GroupId",
+                               connection))
+                    {
+                        getPermissionsCommand.Parameters.AddWithValue("GroupId", groupId);
+
+                        using (var reader = getPermissionsCommand.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                int permissionId = reader.GetInt32(0);
+                                permissions.Add(permissionId);
+                            }
+                        }
+                    }
+                }
+
+                using (var getUserPermissionsCommand =
+                       new NpgsqlCommand("SELECT permission_id FROM user_permissions WHERE user_id = @UserId",
                            connection))
                 {
-                    getPermissionsCommand.Parameters.AddWithValue("GroupId", groupId);
+                    getUserPermissionsCommand.Parameters.AddWithValue("UserId", userId);
 
-                    List<int> permissions = new List<int>();
-                    using (var reader = getPermissionsCommand.ExecuteReader())
+                    using (var reader = getUserPermissionsCommand.ExecuteReader())
                     {
                         while (reader.Read())
                         {
@@ -258,9 +270,9 @@ public class AuthService : IAuthService
                             permissions.Add(permissionId);
                         }
                     }
-
-                    return permissions;
                 }
+
+                return permissions;
             }
         }
     }
@@ -271,7 +283,7 @@ public class AuthService : IAuthService
         connection.Open();
 
         using var insertRefreshTokenCommand = new NpgsqlCommand(
-            "INSERT INTO refresh_tokens (user_id, token, expires) VALUES (@UserId, @Token, @Expires)",
+            "INSERT INTO refresh_tokens (user_id, refresh_token, expires) VALUES (@UserId, @Token, @Expires)",
             connection);
 
         insertRefreshTokenCommand.Parameters.AddWithValue("UserId", userId);
@@ -280,18 +292,33 @@ public class AuthService : IAuthService
 
         insertRefreshTokenCommand.ExecuteNonQuery();
     }
-    
+
     private void RemoveRefreshTokenFromDatabase(string oldToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         connection.Open();
 
         using var removeRefreshTokenCommand = new NpgsqlCommand(
-            "DELETE FROM refresh_tokens WHERE token = @Token",
+            "DELETE FROM refresh_tokens WHERE refresh_token = @Token",
             connection);
 
         removeRefreshTokenCommand.Parameters.AddWithValue("Token", oldToken);
 
         removeRefreshTokenCommand.ExecuteNonQuery();
     }
+
+    /*public void RevokeToken(RevokeTokenRequest revokeTokenRequest)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var updateTokenCommand = new NpgsqlCommand(
+            "UPDATE refresh_tokens SET revoked = @Revoked WHERE refresh_token = @Token",
+            connection);
+
+        updateTokenCommand.Parameters.AddWithValue("Revoked", DateTime.UtcNow);
+        updateTokenCommand.Parameters.AddWithValue("Token", revokeTokenRequest.RefreshToken);
+
+        updateTokenCommand.ExecuteNonQuery();    
+    }*/
 }

@@ -15,18 +15,18 @@ builder.Services.AddControllers();
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AddCar", policy =>
+    options.AddPolicy("AddUser", policy =>
+    {
+        policy.Requirements.Add(new PermissionRequirement("1"));
+    });
+    
+    options.AddPolicy("DeleteUser", policy =>
     {
         policy.Requirements.Add(new PermissionRequirement("2"));
     });
-    
-    options.AddPolicy("DeleteCar", policy =>
+    options.AddPolicy("UpdateUser", policy =>
     {
         policy.Requirements.Add(new PermissionRequirement("3"));
-    });
-    options.AddPolicy("GetCar", policy =>
-    {
-        policy.Requirements.Add(new PermissionRequirement("4"));
     });
 });
 

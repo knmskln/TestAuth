@@ -61,7 +61,7 @@ public class AuthController : ControllerBase
 
         return Ok(response);
     }
-    
+    /*
     [AllowAnonymous]
     [HttpPost("revoke-token")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(AuthenticateResponse))]
@@ -75,5 +75,5 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Token is required" });
 
         return Ok(new { message = "Token revoked" });
-    }
+    }*/
 }

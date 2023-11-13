@@ -7,5 +7,5 @@ public interface IAuthService
     Task<AuthenticateResponse> Register(RegisterRequest request);
     Task<AuthenticateResponse> Login(AuthenticateRequest request);
     Task<AuthenticateResponse> RefreshToken(RefreshTokenRequest refreshTokenRequest);
-    void RevokeToken(RevokeTokenRequest revokeTokenRequest);
+    //void RevokeToken(RevokeTokenRequest revokeTokenRequest);
 }
