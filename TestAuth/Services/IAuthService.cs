@@ -1,4 +1,6 @@
-using TestAuth.Models;
+using TestAuth.Payload;
+using TestAuth.Payload.Request;
+using TestAuth.Payload.Response;
 
 namespace TestAuth.Services;
 

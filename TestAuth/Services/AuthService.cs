@@ -4,85 +4,63 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
-using TestAuth.Entities;
 using TestAuth.Models;
+using TestAuth.Payload.Request;
+using TestAuth.Payload.Response;
+using TestAuth.Repositories;
 using JwtRegisteredClaimNames = Microsoft.IdentityModel.JsonWebTokens.JwtRegisteredClaimNames;
 
 namespace TestAuth.Services;
 
 public class AuthService : IAuthService
 {
-    private readonly string _connectionString;
+    private readonly IUserRepository _userRepository;
     private readonly IConfiguration _configuration;
+    private readonly string _connectionString; //
 
-    public AuthService(IConfiguration configuration)
+    public AuthService(IConfiguration configuration,
+        IUserRepository userRepository)
     {
         _configuration = configuration;
-        _connectionString = _configuration.GetConnectionString("db");
+        _userRepository = userRepository;
+        _connectionString = _configuration.GetConnectionString("db"); //
     }
 
     public async Task<AuthenticateResponse> Register(RegisterRequest request)
     {
-        using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        using var checkUserCommand =
-            new NpgsqlCommand("SELECT COUNT(*) FROM users WHERE login = @Login", connection);
-        checkUserCommand.Parameters.AddWithValue("Login", request.Login);
-        var userCount = (long)await checkUserCommand.ExecuteScalarAsync();
-
-        if (userCount > 0)
+        var user = new User
         {
-            throw new ArgumentException($"User with username {request.Login} already exists.");
-        }
+            Login = request.Login,
+            Surname = request.Surname,
+            Name = request.Name,
+            Patronymic = request.Patronymic,
+            Address = request.Address,
+            Phone = request.Phone,
+            RegistrationDate = DateTime.Now,
+            PasswordUpdated = DateTime.Now,
+            IsBlocked = false,
+            Email = request.Email
+        };
 
-        var passwordHash = HashPassword(request.Login, request.Password);
+        user.Password = HashPassword(request.Password);
 
-        using var insertUserCommand = new NpgsqlCommand(
-            "INSERT INTO users (login, password, surname, name, patronymic, address, phone, registration_date, password_updated, email, is_blocked) " +
-            "VALUES (@Login, @PasswordHash, @Surname, @Name, @Patronymic, @Address, @Phone, @RegistrationDate, @PasswordUpdated, @Email, @IsBlocked)",
-            connection);
-
-        insertUserCommand.Parameters.AddWithValue("Login", request.Login);
-        insertUserCommand.Parameters.AddWithValue("PasswordHash", passwordHash);
-        insertUserCommand.Parameters.AddWithValue("Surname", request.Surname);
-        insertUserCommand.Parameters.AddWithValue("Name", request.Name);
-        insertUserCommand.Parameters.AddWithValue("Patronymic", request.Patronymic);
-        insertUserCommand.Parameters.AddWithValue("Address", request.Address);
-        insertUserCommand.Parameters.AddWithValue("Phone", request.Phone);
-        insertUserCommand.Parameters.AddWithValue("RegistrationDate", DateTime.Now);
-        insertUserCommand.Parameters.AddWithValue("PasswordUpdated", DateTime.Now);
-        insertUserCommand.Parameters.AddWithValue("Email", request.Email);
-        insertUserCommand.Parameters.AddWithValue("IsBlocked", false);
-
-
-        await insertUserCommand.ExecuteNonQueryAsync();
-
+        await _userRepository.RegisterUser(user);
+        
         return await Login(new AuthenticateRequest { Login = request.Login, Password = request.Password });
     }
 
     public async Task<AuthenticateResponse> Login(AuthenticateRequest request)
     {
-        using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        using var findUserCommand =
-            new NpgsqlCommand("SELECT id, password FROM users WHERE login = @Login", connection);
-        findUserCommand.Parameters.AddWithValue("Login", request.Login);
-
-        using var reader = await findUserCommand.ExecuteReaderAsync();
-        if (reader.Read())
+        var user = await _userRepository.GetUserByLogin(request.Login);
+        if (user != null)
         {
-            var userId = reader.GetInt32(0);
-            var passwordHash = reader.GetString(1);
+            var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
 
-            var userPermissions = GetPermissionIdsForUser(userId);
-
-            if (VerifyPassword(request.Login, request.Password, passwordHash))
+            if (VerifyPassword(request.Password, user.Password))
             {
                 var authClaims = new List<Claim>
                 {
-                    new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+                    new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                     new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
                 };
 
@@ -93,8 +71,8 @@ public class AuthService : IAuthService
 
                 var token = GetToken(authClaims);
                 var refreshToken = GenerateRefreshToken();
-                SaveRefreshTokenToDatabase(userId, refreshToken);
-                return new AuthenticateResponse(userId, new JwtSecurityTokenHandler().WriteToken(token), refreshToken);
+                SaveRefreshTokenToDatabase(user.Id, refreshToken);
+                return new AuthenticateResponse(user.Id, new JwtSecurityTokenHandler().WriteToken(token), refreshToken);
             }
         }
 
@@ -133,7 +111,7 @@ public class AuthService : IAuthService
         if (isValid)
         {
             var userId = GetUserIdFromRefreshToken(refreshTokenRequest.RefreshToken);
-            var userPermissions = GetPermissionIdsForUser(userId);
+            var userPermissions = await _userRepository.GetPermissionsForUser(userId);
 
             var authClaims = new List<Claim>
             {
@@ -161,6 +139,20 @@ public class AuthService : IAuthService
         return null;
     }
 
+    private string HashPassword(string password)
+    {
+        return BCrypt.Net.BCrypt.HashPassword(password, BCrypt.Net.BCrypt.GenerateSalt());
+    }
+
+    private bool VerifyPassword(string inputPassword, string hashedPassword)
+    {
+        return BCrypt.Net.BCrypt.Verify(inputPassword, hashedPassword);
+    }
+
+    /// <summary>
+    /// </summary>
+    /// <param name="refreshToken"></param>
+    /// <returns></returns>
     private bool IsValidRefreshToken(string refreshToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
@@ -196,87 +188,7 @@ public class AuthService : IAuthService
 
         return userId;
     }
-
-    private string HashPassword(string login, string password)
-    {
-        string combinedString = login + password;
-
-        using (SHA256 sha256 = SHA256.Create())
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(combinedString);
-            byte[] hashedBytes = sha256.ComputeHash(bytes);
-            return BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
-        }
-    }
-
-    private bool VerifyPassword(string login, string inputPassword, string hashedPassword)
-    {
-        var hashedInputPassword = HashPassword(login, inputPassword);
-        return string.Equals(hashedInputPassword, hashedPassword, StringComparison.OrdinalIgnoreCase);
-    }
-
-    public List<int> GetPermissionIdsForUser(int userId)
-    {
-        using (var connection = new NpgsqlConnection(_connectionString))
-        {
-            connection.Open();
-
-            using (var getGroupIdsCommand =
-                   new NpgsqlCommand("SELECT group_id FROM user_groups WHERE user_id = @UserId", connection))
-            {
-                getGroupIdsCommand.Parameters.AddWithValue("UserId", userId);
-
-                List<int> groupIds = new List<int>();
-                using (var reader = getGroupIdsCommand.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        int groupId = reader.GetInt32(0);
-                        groupIds.Add(groupId);
-                    }
-                }
-
-                List<int> permissions = new List<int>();
-                foreach (var groupId in groupIds)
-                {
-                    using (var getPermissionsCommand =
-                           new NpgsqlCommand("SELECT permission_id FROM group_permissions WHERE group_id = @GroupId",
-                               connection))
-                    {
-                        getPermissionsCommand.Parameters.AddWithValue("GroupId", groupId);
-
-                        using (var reader = getPermissionsCommand.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                int permissionId = reader.GetInt32(0);
-                                permissions.Add(permissionId);
-                            }
-                        }
-                    }
-                }
-
-                using (var getUserPermissionsCommand =
-                       new NpgsqlCommand("SELECT permission_id FROM user_permissions WHERE user_id = @UserId",
-                           connection))
-                {
-                    getUserPermissionsCommand.Parameters.AddWithValue("UserId", userId);
-
-                    using (var reader = getUserPermissionsCommand.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            int permissionId = reader.GetInt32(0);
-                            permissions.Add(permissionId);
-                        }
-                    }
-                }
-
-                return permissions;
-            }
-        }
-    }
-
+    
     private void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);

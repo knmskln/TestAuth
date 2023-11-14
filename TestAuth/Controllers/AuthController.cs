@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using TestAuth.Models;
+using TestAuth.Payload.Request;
+using TestAuth.Payload.Response;
 using TestAuth.Services;
 
 namespace TestAuth.Controllers;
@@ -27,7 +28,7 @@ public class AuthController : ControllerBase
         
         if (response == null)
         {
-            return BadRequest($"Unable to autenticate user {request.Login}");
+            return BadRequest($"Unable to authenticate user {request.Login}");
         }
         
         return Ok(response);

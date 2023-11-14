@@ -1,4 +1,4 @@
-namespace TestAuth.Models;
+namespace TestAuth.Payload.Request;
 
 public class RefreshTokenRequest
 {

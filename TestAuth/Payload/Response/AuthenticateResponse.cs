@@ -1,6 +1,6 @@
-using TestAuth.Entities;
+using TestAuth.Models;
 
-namespace TestAuth.Models;
+namespace TestAuth.Payload.Response;
 
 public class AuthenticateResponse
 {

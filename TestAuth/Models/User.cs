@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
-namespace TestAuth.Entities;
+namespace TestAuth.Models;
 
 public class User
 {

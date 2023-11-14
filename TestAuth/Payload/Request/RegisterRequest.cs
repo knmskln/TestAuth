@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace TestAuth.Models;
+namespace TestAuth.Payload.Request;
 
 public class RegisterRequest
 {
