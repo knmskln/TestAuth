@@ -30,7 +30,11 @@ public class AuthController : ControllerBase
         {
             return BadRequest($"Unable to authenticate user {request.Login}");
         }
-        
+
+        if (response.IsBlocked)
+        {
+            return BadRequest($"User {request.Login} is blocked");
+        }
         return Ok(response);
     }
 

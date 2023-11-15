@@ -49,6 +49,12 @@ public class AuthService : IAuthService
     public async Task<AuthenticateResponse> Login(AuthenticateRequest request)
     {
         var user = await _userRepository.GetUserByLogin(request.Login);
+        
+        if (user.IsBlocked)
+        {
+            return new AuthenticateResponse(user.Id, user.IsBlocked, null!, null!);
+        }
+        
         if (user != null)
         {
             var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
@@ -69,7 +75,7 @@ public class AuthService : IAuthService
                 var token = GetToken(authClaims);
                 var refreshToken = GenerateRefreshToken();
                 SaveRefreshTokenToDatabase(user.Id, refreshToken);
-                return new AuthenticateResponse(user.Id, new JwtSecurityTokenHandler().WriteToken(token), refreshToken);
+                return new AuthenticateResponse(user.Id, user.IsBlocked, new JwtSecurityTokenHandler().WriteToken(token), refreshToken);
             }
         }
 
@@ -95,7 +101,7 @@ public class AuthService : IAuthService
         var refreshToken = new RefreshToken
         {
             Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(64)),
-            Expires = DateTime.UtcNow.AddMinutes(5)
+            Expires = DateTime.Now.AddDays(5)
         };
 
         return refreshToken;
@@ -107,12 +113,13 @@ public class AuthService : IAuthService
 
         if (isValid)
         {
-            var userId = GetUserIdFromRefreshToken(refreshTokenRequest.RefreshToken);
-            var userPermissions = await _userRepository.GetPermissionsForUser(userId);
+            var user = await _userRepository.GetUserByRefreshToken(refreshTokenRequest.RefreshToken);
+            
+            var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
 
             var authClaims = new List<Claim>
             {
-                new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+                new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
@@ -125,11 +132,11 @@ public class AuthService : IAuthService
 
             var newRefreshToken = GenerateRefreshToken();
 
-            SaveRefreshTokenToDatabase(userId, newRefreshToken);
+            SaveRefreshTokenToDatabase(user.Id, newRefreshToken);
 
             RemoveRefreshTokenFromDatabase(refreshTokenRequest.RefreshToken);
 
-            return new AuthenticateResponse(userId, new JwtSecurityTokenHandler().WriteToken(newToken),
+            return new AuthenticateResponse(user.Id, user.IsBlocked,new JwtSecurityTokenHandler().WriteToken(newToken),
                 newRefreshToken);
         }
 
@@ -151,11 +158,6 @@ public class AuthService : IAuthService
         return _userRepository.IsValidRefreshToken(refreshToken);
     }
 
-    private int GetUserIdFromRefreshToken(string refreshToken)
-    {
-        return _userRepository.GetUserIdFromRefreshToken(refreshToken);
-    }
-    
     private void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
     {
         _userRepository.SaveRefreshTokenToDatabase(userId, refreshToken);

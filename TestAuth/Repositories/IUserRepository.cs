@@ -10,5 +10,5 @@ public interface IUserRepository
     bool IsValidRefreshToken(string refreshToken);
     void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken);
     void RemoveRefreshTokenFromDatabase(string oldToken);
-    int GetUserIdFromRefreshToken(string refreshToken);
+    Task<User> GetUserByRefreshToken(string refreshToken);
 }

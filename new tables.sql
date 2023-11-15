@@ -107,6 +107,10 @@ VALUES (1, 2);
 INSERT INTO user_permissions (user_id, permission_id)
 VALUES (1, 2);
 
+UPDATE users
+SET is_blocked = true
+WHERE id = 5;
+
 CREATE OR REPLACE FUNCTION geolens_custom_auth(identifier text)
     RETURNS SETOF users
 LANGUAGE SQL
@@ -131,4 +135,12 @@ LANGUAGE SQL
 AS $$
     INSERT INTO users (email, login, is_blocked, address, phone, patronymic, name, surname, password, password_updated, registration_date)
     VALUES (_email, _login, _is_blocked, _address, _phone, _patronymic, _name, _surname, _password, _password_updated, _registration_date);
+$$;
+
+CREATE OR REPLACE FUNCTION get_user_by_refresh_token(_refresh_token text)
+	RETURNS SETOF users					
+LANGUAGE SQL
+AS $$
+	SELECT * FROM USERS us
+	WHERE us.id = (SELECT user_id FROM  refresh_tokens WHERE refresh_token = _refresh_token)
 $$;
