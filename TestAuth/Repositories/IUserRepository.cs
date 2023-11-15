@@ -7,4 +7,8 @@ public interface IUserRepository
     Task RegisterUser(User user); 
     Task<User> GetUserByLogin(string identifier);
     Task<List<int>> GetPermissionsForUser(int userId);
+    bool IsValidRefreshToken(string refreshToken);
+    void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken);
+    void RemoveRefreshTokenFromDatabase(string oldToken);
+    int GetUserIdFromRefreshToken(string refreshToken);
 }

@@ -16,14 +16,12 @@ public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
     private readonly IConfiguration _configuration;
-    private readonly string _connectionString; //
 
     public AuthService(IConfiguration configuration,
         IUserRepository userRepository)
     {
         _configuration = configuration;
         _userRepository = userRepository;
-        _connectionString = _configuration.GetConnectionString("db"); //
     }
 
     public async Task<AuthenticateResponse> Register(RegisterRequest request)
@@ -98,7 +96,7 @@ public class AuthService : IAuthService
         var refreshToken = new RefreshToken
         {
             Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(64)),
-            Expires = DateTime.UtcNow.AddDays(7)
+            Expires = DateTime.UtcNow.AddMinutes(5)
         };
 
         return refreshToken;
@@ -149,88 +147,23 @@ public class AuthService : IAuthService
         return BCrypt.Net.BCrypt.Verify(inputPassword, hashedPassword);
     }
 
-    /// <summary>
-    /// </summary>
-    /// <param name="refreshToken"></param>
-    /// <returns></returns>
     private bool IsValidRefreshToken(string refreshToken)
     {
-        using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
-
-        using var findRefreshTokenCommand =
-            new NpgsqlCommand("SELECT expires FROM refresh_tokens WHERE refresh_token = @RefreshToken", connection);
-        findRefreshTokenCommand.Parameters.AddWithValue("RefreshToken", refreshToken);
-
-        using var reader = findRefreshTokenCommand.ExecuteReader();
-        if (reader.Read())
-        {
-            var expires = reader.GetDateTime(0);
-            if (expires > DateTime.UtcNow)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return _userRepository.IsValidRefreshToken(refreshToken);
     }
 
     private int GetUserIdFromRefreshToken(string refreshToken)
     {
-        using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
-
-        using var getUserIdCommand =
-            new NpgsqlCommand("SELECT user_id FROM refresh_tokens WHERE refresh_token = @Token", connection);
-        getUserIdCommand.Parameters.AddWithValue("Token", refreshToken);
-
-        var userId = (int)getUserIdCommand.ExecuteScalar();
-
-        return userId;
+        return _userRepository.GetUserIdFromRefreshToken(refreshToken);
     }
     
     private void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
     {
-        using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
-
-        using var insertRefreshTokenCommand = new NpgsqlCommand(
-            "INSERT INTO refresh_tokens (user_id, refresh_token, expires) VALUES (@UserId, @Token, @Expires)",
-            connection);
-
-        insertRefreshTokenCommand.Parameters.AddWithValue("UserId", userId);
-        insertRefreshTokenCommand.Parameters.AddWithValue("Token", refreshToken.Token);
-        insertRefreshTokenCommand.Parameters.AddWithValue("Expires", refreshToken.Expires);
-
-        insertRefreshTokenCommand.ExecuteNonQuery();
+        _userRepository.SaveRefreshTokenToDatabase(userId, refreshToken);
     }
 
     private void RemoveRefreshTokenFromDatabase(string oldToken)
     {
-        using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
-
-        using var removeRefreshTokenCommand = new NpgsqlCommand(
-            "DELETE FROM refresh_tokens WHERE refresh_token = @Token",
-            connection);
-
-        removeRefreshTokenCommand.Parameters.AddWithValue("Token", oldToken);
-
-        removeRefreshTokenCommand.ExecuteNonQuery();
+        _userRepository.RemoveRefreshTokenFromDatabase(oldToken);
     }
-
-    /*public void RevokeToken(RevokeTokenRequest revokeTokenRequest)
-    {
-        using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
-
-        using var updateTokenCommand = new NpgsqlCommand(
-            "UPDATE refresh_tokens SET revoked = @Revoked WHERE refresh_token = @Token",
-            connection);
-
-        updateTokenCommand.Parameters.AddWithValue("Revoked", DateTime.UtcNow);
-        updateTokenCommand.Parameters.AddWithValue("Token", revokeTokenRequest.RefreshToken);
-
-        updateTokenCommand.ExecuteNonQuery();    
-    }*/
 }

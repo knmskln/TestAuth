@@ -104,4 +104,70 @@ public class UserRepository : IUserRepository
         }
         return permissions;
     }
+    
+    public bool IsValidRefreshToken(string refreshToken)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var findRefreshTokenCommand =
+            new NpgsqlCommand("SELECT expires FROM refresh_tokens WHERE refresh_token = @RefreshToken", connection);
+        findRefreshTokenCommand.Parameters.AddWithValue("RefreshToken", refreshToken);
+
+        using var reader = findRefreshTokenCommand.ExecuteReader();
+        if (reader.Read())
+        {
+            var expires = reader.GetDateTime(0);
+            if (expires > DateTime.Now)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    
+    public void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var insertRefreshTokenCommand = new NpgsqlCommand(
+            "INSERT INTO refresh_tokens (user_id, refresh_token, expires) VALUES (@UserId, @Token, @Expires)",
+            connection);
+
+        insertRefreshTokenCommand.Parameters.AddWithValue("UserId", userId);
+        insertRefreshTokenCommand.Parameters.AddWithValue("Token", refreshToken.Token);
+        insertRefreshTokenCommand.Parameters.AddWithValue("Expires", refreshToken.Expires);
+
+        insertRefreshTokenCommand.ExecuteNonQuery();
+    }
+
+    public void RemoveRefreshTokenFromDatabase(string oldToken)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var removeRefreshTokenCommand = new NpgsqlCommand(
+            "DELETE FROM refresh_tokens WHERE refresh_token = @Token",
+            connection);
+
+        removeRefreshTokenCommand.Parameters.AddWithValue("Token", oldToken);
+
+        removeRefreshTokenCommand.ExecuteNonQuery();
+    }
+    
+    public int GetUserIdFromRefreshToken(string refreshToken)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        using var getUserIdCommand =
+            new NpgsqlCommand("SELECT user_id FROM refresh_tokens WHERE refresh_token = @Token", connection);
+        getUserIdCommand.Parameters.AddWithValue("Token", refreshToken);
+
+        var userId = (int)getUserIdCommand.ExecuteScalar();
+
+        return userId;
+    }
 }
