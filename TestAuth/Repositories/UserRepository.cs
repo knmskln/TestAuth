@@ -107,12 +107,12 @@ public class UserRepository : IUserRepository
         return null;
     }
     
-    public List<int> GetPermissionsForUser(int userId)
+    public async Task<List<int>> GetPermissionsForUser(int userId)
     {
         List<int> permissions = new List<int>();
         using (var connection = new NpgsqlConnection(_connectionString))
         {
-            connection.Open();
+            await connection.OpenAsync();
             using (var getUserPermissionsCommand = new NpgsqlCommand("SELECT * FROM get_user_permissions(@UserId)", connection))
             {
                 getUserPermissionsCommand.Parameters.AddWithValue("UserId", userId);
@@ -130,10 +130,10 @@ public class UserRepository : IUserRepository
         return permissions;
     }
     
-    public bool IsValidRefreshToken(string refreshToken)
+    public async Task<bool> IsValidRefreshToken(string refreshToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
+        await connection.OpenAsync();
 
         using var findRefreshTokenCommand =
             new NpgsqlCommand("SELECT expires FROM refresh_tokens WHERE refresh_token = @RefreshToken", connection);
@@ -152,33 +152,31 @@ public class UserRepository : IUserRepository
         return false;
     }
     
-    public void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
+    public async Task SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
+        await connection.OpenAsync();
 
-        using var insertRefreshTokenCommand = new NpgsqlCommand(
-            "INSERT INTO refresh_tokens (user_id, refresh_token, expires) VALUES (@UserId, @Token, @Expires)",
-            connection);
+        using var saveRefreshTokenCommand = new NpgsqlCommand("CALL save_refresh_token(@_user_id, @_refresh_token, @_expires)", connection);
 
-        insertRefreshTokenCommand.Parameters.AddWithValue("UserId", userId);
-        insertRefreshTokenCommand.Parameters.AddWithValue("Token", refreshToken.Token);
-        insertRefreshTokenCommand.Parameters.AddWithValue("Expires", refreshToken.Expires);
+        saveRefreshTokenCommand.Parameters.AddWithValue("_user_id", userId);
+        saveRefreshTokenCommand.Parameters.AddWithValue("_refresh_token", refreshToken.Token);
+        saveRefreshTokenCommand.Parameters.AddWithValue("_expires", refreshToken.Expires);
 
-        insertRefreshTokenCommand.ExecuteNonQuery();
+        await saveRefreshTokenCommand.ExecuteNonQueryAsync();
     }
 
-    public void RemoveRefreshTokenFromDatabase(string oldToken)
+    public async Task RemoveRefreshTokenFromDatabase(string oldToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
+        await connection.OpenAsync();
 
         using var removeRefreshTokenCommand = new NpgsqlCommand(
             "DELETE FROM refresh_tokens WHERE refresh_token = @Token",
             connection);
 
         removeRefreshTokenCommand.Parameters.AddWithValue("Token", oldToken);
-
-        removeRefreshTokenCommand.ExecuteNonQuery();
+        
+        await removeRefreshTokenCommand.ExecuteNonQueryAsync();
     }
 }

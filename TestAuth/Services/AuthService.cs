@@ -57,7 +57,7 @@ public class AuthService : IAuthService
         
         if (user != null)
         {
-            var userPermissions = _userRepository.GetPermissionsForUser(user.Id);
+            var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
 
             if (VerifyPassword(request.Password, user.Password))
             {
@@ -74,7 +74,8 @@ public class AuthService : IAuthService
 
                 var token = GetToken(authClaims);
                 var refreshToken = GenerateRefreshToken();
-                SaveRefreshTokenToDatabase(user.Id, refreshToken);
+                await _userRepository.SaveRefreshTokenToDatabase(user.Id, refreshToken);
+
                 return new AuthenticateResponse(user.Id, user.IsBlocked, new JwtSecurityTokenHandler().WriteToken(token), refreshToken);
             }
         }
@@ -82,6 +83,52 @@ public class AuthService : IAuthService
         return null;
     }
 
+    public async Task<AuthenticateResponse> RefreshToken(RefreshTokenRequest refreshTokenRequest)
+    {
+        var isValid = await _userRepository.IsValidRefreshToken(refreshTokenRequest.RefreshToken);
+        
+        if (isValid)
+        {
+            var user = await _userRepository.GetUserByRefreshToken(refreshTokenRequest.RefreshToken);
+            
+            var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
+
+            var authClaims = new List<Claim>
+            {
+                new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            foreach (var permission in userPermissions)
+            {
+                authClaims.Add(new Claim("permission", permission.ToString()));
+            }
+
+            var newToken = GetToken(authClaims);
+
+            var newRefreshToken = GenerateRefreshToken();
+            
+            await _userRepository.SaveRefreshTokenToDatabase(user.Id, newRefreshToken);
+
+            await _userRepository.RemoveRefreshTokenFromDatabase(refreshTokenRequest.RefreshToken);
+
+            return new AuthenticateResponse(user.Id, user.IsBlocked,new JwtSecurityTokenHandler().WriteToken(newToken),
+                newRefreshToken);
+        }
+
+        return null;
+    }
+
+    private static string HashPassword(string password)
+    {
+        return BCrypt.Net.BCrypt.HashPassword(password, BCrypt.Net.BCrypt.GenerateSalt());
+    }
+
+    private static bool VerifyPassword(string inputPassword, string hashedPassword)
+    {
+        return BCrypt.Net.BCrypt.Verify(inputPassword, hashedPassword);
+    }
+    
     private JwtSecurityToken GetToken(IEnumerable<Claim> authClaims)
     {
         var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"]));
@@ -105,66 +152,5 @@ public class AuthService : IAuthService
         };
 
         return refreshToken;
-    }
-
-    public async Task<AuthenticateResponse> RefreshToken(RefreshTokenRequest refreshTokenRequest)
-    {
-        var isValid = IsValidRefreshToken(refreshTokenRequest.RefreshToken);
-
-        if (isValid)
-        {
-            var user = await _userRepository.GetUserByRefreshToken(refreshTokenRequest.RefreshToken);
-            
-            var userPermissions = _userRepository.GetPermissionsForUser(user.Id);
-
-            var authClaims = new List<Claim>
-            {
-                new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-            };
-
-            foreach (var permission in userPermissions)
-            {
-                authClaims.Add(new Claim("permission", permission.ToString()));
-            }
-
-            var newToken = GetToken(authClaims);
-
-            var newRefreshToken = GenerateRefreshToken();
-
-            SaveRefreshTokenToDatabase(user.Id, newRefreshToken);
-
-            RemoveRefreshTokenFromDatabase(refreshTokenRequest.RefreshToken);
-
-            return new AuthenticateResponse(user.Id, user.IsBlocked,new JwtSecurityTokenHandler().WriteToken(newToken),
-                newRefreshToken);
-        }
-
-        return null;
-    }
-
-    private string HashPassword(string password)
-    {
-        return BCrypt.Net.BCrypt.HashPassword(password, BCrypt.Net.BCrypt.GenerateSalt());
-    }
-
-    private bool VerifyPassword(string inputPassword, string hashedPassword)
-    {
-        return BCrypt.Net.BCrypt.Verify(inputPassword, hashedPassword);
-    }
-
-    private bool IsValidRefreshToken(string refreshToken)
-    {
-        return _userRepository.IsValidRefreshToken(refreshToken);
-    }
-
-    private void SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
-    {
-        _userRepository.SaveRefreshTokenToDatabase(userId, refreshToken);
-    }
-
-    private void RemoveRefreshTokenFromDatabase(string oldToken)
-    {
-        _userRepository.RemoveRefreshTokenFromDatabase(oldToken);
     }
 }
