@@ -108,8 +108,8 @@ INSERT INTO user_permissions (user_id, permission_id)
 VALUES (1, 2);
 
 UPDATE users
-SET is_blocked = true
-WHERE id = 5;
+SET is_blocked = false
+WHERE id = 6;
 
 CREATE OR REPLACE FUNCTION geolens_custom_auth(identifier text)
     RETURNS SETOF users
@@ -160,4 +160,11 @@ LANGUAGE SQL
 AS $$
     INSERT INTO refresh_tokens (user_id, refresh_token, expires)
     VALUES (_user_id, _refresh_token, _expires);
+$$;
+
+CREATE OR REPLACE PROCEDURE remove_refresh_token(
+    _refresh_token text)
+LANGUAGE SQL
+AS $$
+    DELETE FROM refresh_tokens WHERE refresh_token = _refresh_token;
 $$;

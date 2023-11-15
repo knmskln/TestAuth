@@ -73,6 +73,29 @@ public class UserRepository : IUserRepository
 
         return null;
     }
+
+    public async Task<List<int>> GetPermissionsForUser(int userId)
+    {
+        List<int> permissions = new List<int>();
+        using (var connection = new NpgsqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            using (var getUserPermissionsCommand = new NpgsqlCommand("SELECT * FROM get_user_permissions(@UserId)", connection))
+            {
+                getUserPermissionsCommand.Parameters.AddWithValue("UserId", userId);
+
+                using (var reader = getUserPermissionsCommand.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        int permissionId = reader.GetInt32(0);
+                        permissions.Add(permissionId);
+                    }
+                }
+            }
+        }
+        return permissions;
+    }
     
     public async Task<User> GetUserByRefreshToken(string refreshToken)
     {
@@ -105,29 +128,6 @@ public class UserRepository : IUserRepository
         }
 
         return null;
-    }
-    
-    public async Task<List<int>> GetPermissionsForUser(int userId)
-    {
-        List<int> permissions = new List<int>();
-        using (var connection = new NpgsqlConnection(_connectionString))
-        {
-            await connection.OpenAsync();
-            using (var getUserPermissionsCommand = new NpgsqlCommand("SELECT * FROM get_user_permissions(@UserId)", connection))
-            {
-                getUserPermissionsCommand.Parameters.AddWithValue("UserId", userId);
-
-                using (var reader = getUserPermissionsCommand.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        int permissionId = reader.GetInt32(0);
-                        permissions.Add(permissionId);
-                    }
-                }
-            }
-        }
-        return permissions;
     }
     
     public async Task<bool> IsValidRefreshToken(string refreshToken)
@@ -176,5 +176,38 @@ public class UserRepository : IUserRepository
         removeRefreshTokenCommand.Parameters.AddWithValue("_refresh_token", oldToken);
 
         await removeRefreshTokenCommand.ExecuteNonQueryAsync();
+    }
+    public async Task BlockUser(int userId)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        using var command = new NpgsqlCommand("UPDATE users SET is_blocked = true WHERE id = @UserId", connection);
+        await connection.OpenAsync();
+
+        command.Parameters.AddWithValue("UserId", userId);
+
+        await command.ExecuteNonQueryAsync();
+    }
+    public async Task<bool> UserExists(int userId)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        using var command = new NpgsqlCommand("SELECT COUNT(*) FROM users WHERE id = @UserId", connection);
+        await connection.OpenAsync();
+
+        command.Parameters.AddWithValue("UserId", userId);
+
+        var userCount = (long)await command.ExecuteScalarAsync();
+
+        return userCount > 0;
+    }
+    
+    public async Task RemoveRefreshTokens(int userId)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        using var command = new NpgsqlCommand("DELETE FROM refresh_tokens WHERE user_id = @UserId", connection);
+        await connection.OpenAsync();
+
+        command.Parameters.AddWithValue("UserId", userId);
+
+        await command.ExecuteNonQueryAsync();
     }
 }
