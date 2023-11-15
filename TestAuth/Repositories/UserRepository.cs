@@ -30,9 +30,9 @@ public class UserRepository : IUserRepository
         insertUserCommand.Parameters.AddWithValue("_email", user.Email);
         insertUserCommand.Parameters.AddWithValue("_login", user.Login);
         insertUserCommand.Parameters.AddWithValue("_is_blocked", user.IsBlocked);
-        insertUserCommand.Parameters.AddWithValue("_address", user.Address);
-        insertUserCommand.Parameters.AddWithValue("_phone", user.Phone);
-        insertUserCommand.Parameters.AddWithValue("_patronymic", user.Patronymic);
+        insertUserCommand.Parameters.AddWithValue("_address", user.Address ?? string.Empty);
+        insertUserCommand.Parameters.AddWithValue("_phone", user.Phone ?? string.Empty);
+        insertUserCommand.Parameters.AddWithValue("_patronymic", user.Patronymic ?? string.Empty);
         insertUserCommand.Parameters.AddWithValue("_name", user.Name);
         insertUserCommand.Parameters.AddWithValue("_surname", user.Surname);
         insertUserCommand.Parameters.AddWithValue("_password", user.Password);
@@ -55,7 +55,7 @@ public class UserRepository : IUserRepository
             var user = new User
             {
                 Id = reader.GetInt32(reader.GetOrdinal("id")),
-                Email = reader.IsDBNull(reader.GetOrdinal("email")) ? null : reader.GetString(reader.GetOrdinal("email")),
+                Email = reader.GetString(reader.GetOrdinal("email")),
                 Login = reader.GetString(reader.GetOrdinal("login")),
                 IsBlocked = reader.GetBoolean(reader.GetOrdinal("is_blocked")),
                 Address = reader.IsDBNull(reader.GetOrdinal("address")) ? null : reader.GetString(reader.GetOrdinal("address")),
@@ -88,7 +88,7 @@ public class UserRepository : IUserRepository
             var user = new User
             {
                 Id = reader.GetInt32(reader.GetOrdinal("id")),
-                Email = reader.IsDBNull(reader.GetOrdinal("email")) ? null : reader.GetString(reader.GetOrdinal("email")),
+                Email = reader.GetString(reader.GetOrdinal("email")),
                 Login = reader.GetString(reader.GetOrdinal("login")),
                 IsBlocked = reader.GetBoolean(reader.GetOrdinal("is_blocked")),
                 Address = reader.IsDBNull(reader.GetOrdinal("address")) ? null : reader.GetString(reader.GetOrdinal("address")),
@@ -107,16 +107,13 @@ public class UserRepository : IUserRepository
         return null;
     }
     
-    //
-    public async Task<List<int>> GetPermissionsForUser(int userId)
+    public List<int> GetPermissionsForUser(int userId)
     {
         List<int> permissions = new List<int>();
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             connection.Open();
-            using (var getUserPermissionsCommand =
-                   new NpgsqlCommand("SELECT permission_id FROM user_permissions WHERE user_id = @UserId",
-                       connection))
+            using (var getUserPermissionsCommand = new NpgsqlCommand("SELECT * FROM get_user_permissions(@UserId)", connection))
             {
                 getUserPermissionsCommand.Parameters.AddWithValue("UserId", userId);
 

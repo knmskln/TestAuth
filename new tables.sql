@@ -144,3 +144,10 @@ AS $$
 	SELECT * FROM USERS us
 	WHERE us.id = (SELECT user_id FROM  refresh_tokens WHERE refresh_token = _refresh_token)
 $$;
+
+CREATE OR REPLACE FUNCTION get_user_permissions(_user_id INT)
+RETURNS SETOF INT
+LANGUAGE SQL
+AS $$
+    SELECT permission_id FROM user_permissions WHERE user_id = _user_id;
+$$;

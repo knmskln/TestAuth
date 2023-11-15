@@ -15,9 +15,8 @@ public class RegisterRequest
     public string Surname { get; set; }
     [Required]
     public string Name { get; set; }
-    public string Patronymic { get; set; }   
-    public string Address { get; set; }
-    [Required]
+    public string? Patronymic { get; set; }
+    public string? Address { get; set; }
     [Phone]
-    public string Phone { get; set; }
+    public string? Phone { get; set; }
 }

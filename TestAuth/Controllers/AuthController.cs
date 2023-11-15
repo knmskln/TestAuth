@@ -22,6 +22,7 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(string))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Login([FromBody] AuthenticateRequest request)
     {
         var response = await _authenticationService.Login(request);
@@ -33,8 +34,9 @@ public class AuthController : ControllerBase
 
         if (response.IsBlocked)
         {
-            return BadRequest($"User {request.Login} is blocked");
+            return new ObjectResult($"User {request.Login} is blocked") { StatusCode = 403};
         }
+
         return Ok(response);
     }
 

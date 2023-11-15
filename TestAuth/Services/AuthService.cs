@@ -57,7 +57,7 @@ public class AuthService : IAuthService
         
         if (user != null)
         {
-            var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
+            var userPermissions = _userRepository.GetPermissionsForUser(user.Id);
 
             if (VerifyPassword(request.Password, user.Password))
             {
@@ -115,7 +115,7 @@ public class AuthService : IAuthService
         {
             var user = await _userRepository.GetUserByRefreshToken(refreshTokenRequest.RefreshToken);
             
-            var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
+            var userPermissions = _userRepository.GetPermissionsForUser(user.Id);
 
             var authClaims = new List<Claim>
             {
