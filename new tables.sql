@@ -151,3 +151,13 @@ LANGUAGE SQL
 AS $$
     SELECT permission_id FROM user_permissions WHERE user_id = _user_id;
 $$;
+
+CREATE OR REPLACE PROCEDURE save_refresh_token(
+    _user_id INT,
+    _refresh_token text,
+    _expires timestamp without time zone)
+LANGUAGE SQL
+AS $$
+    INSERT INTO refresh_tokens (user_id, refresh_token, expires)
+    VALUES (_user_id, _refresh_token, _expires);
+$$;

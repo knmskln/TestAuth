@@ -171,12 +171,10 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var removeRefreshTokenCommand = new NpgsqlCommand(
-            "DELETE FROM refresh_tokens WHERE refresh_token = @Token",
-            connection);
+        using var removeRefreshTokenCommand = new NpgsqlCommand("CALL remove_refresh_token(@_refresh_token)", connection);
 
-        removeRefreshTokenCommand.Parameters.AddWithValue("Token", oldToken);
-        
+        removeRefreshTokenCommand.Parameters.AddWithValue("_refresh_token", oldToken);
+
         await removeRefreshTokenCommand.ExecuteNonQueryAsync();
     }
 }
