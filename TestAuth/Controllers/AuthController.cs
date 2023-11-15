@@ -62,19 +62,4 @@ public class AuthController : ControllerBase
 
         return Ok(response);
     }
-    /*
-    [AllowAnonymous]
-    [HttpPost("revoke-token")]
-    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(AuthenticateResponse))]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public IActionResult RevokeToken([FromBody] RevokeTokenRequest revokeTokenRequest)
-    {
-        _authenticationService.RevokeToken(revokeTokenRequest);
-
-        if (string.IsNullOrEmpty(revokeTokenRequest.RefreshToken))
-            return BadRequest(new { message = "Token is required" });
-
-        return Ok(new { message = "Token revoked" });
-    }*/
 }

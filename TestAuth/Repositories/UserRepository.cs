@@ -25,28 +25,22 @@ public class UserRepository : IUserRepository
             throw new ArgumentException($"User with username {user.Login} already exists.");
         }
         
-        using var insertUserCommand = new NpgsqlCommand(
-            "INSERT INTO users (login, password, surname, name, patronymic, address, phone, registration_date, password_updated, email, is_blocked) " +
-            "VALUES (@Login, @PasswordHash, @Surname, @Name, @Patronymic, @Address, @Phone, @RegistrationDate, @PasswordUpdated, @Email, @IsBlocked)",
-            connection);
-
-        insertUserCommand.Parameters.AddWithValue("Login", user.Login);
-        insertUserCommand.Parameters.AddWithValue("PasswordHash", user.Password);
-        insertUserCommand.Parameters.AddWithValue("Surname", user.Surname);
-        insertUserCommand.Parameters.AddWithValue("Name", user.Name);
-        insertUserCommand.Parameters.AddWithValue("Patronymic", user.Patronymic);
-        insertUserCommand.Parameters.AddWithValue("Address", user.Address);
-        insertUserCommand.Parameters.AddWithValue("Phone", user.Phone);
-        insertUserCommand.Parameters.AddWithValue("RegistrationDate", user.RegistrationDate);
-        insertUserCommand.Parameters.AddWithValue("PasswordUpdated", user.PasswordUpdated);
-        insertUserCommand.Parameters.AddWithValue("Email", user.Email);
-        insertUserCommand.Parameters.AddWithValue("IsBlocked", user.IsBlocked);
-
+        using var insertUserCommand = new NpgsqlCommand("CALL geolens_custom_reg(@_email, @_login, @_is_blocked, @_address, @_phone, @_patronymic, @_name, @_surname, @_password, @_password_updated, @_registration_date)", connection);
+        
+        insertUserCommand.Parameters.AddWithValue("_email", user.Email);
+        insertUserCommand.Parameters.AddWithValue("_login", user.Login);
+        insertUserCommand.Parameters.AddWithValue("_is_blocked", user.IsBlocked);
+        insertUserCommand.Parameters.AddWithValue("_address", user.Address);
+        insertUserCommand.Parameters.AddWithValue("_phone", user.Phone);
+        insertUserCommand.Parameters.AddWithValue("_patronymic", user.Patronymic);
+        insertUserCommand.Parameters.AddWithValue("_name", user.Name);
+        insertUserCommand.Parameters.AddWithValue("_surname", user.Surname);
+        insertUserCommand.Parameters.AddWithValue("_password", user.Password);
+        insertUserCommand.Parameters.AddWithValue("_password_updated", user.PasswordUpdated);
+        insertUserCommand.Parameters.AddWithValue("_registration_date", user.RegistrationDate);
 
         await insertUserCommand.ExecuteNonQueryAsync();
     }
-    
-    //
     public async Task<User> GetUserByLogin(string identifier)
     {
         using var connection = new NpgsqlConnection(_connectionString);
