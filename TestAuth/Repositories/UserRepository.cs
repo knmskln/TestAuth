@@ -16,16 +16,7 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var checkUserCommand = new NpgsqlCommand("SELECT COUNT(*) FROM users WHERE login = @Login", connection);
-        checkUserCommand.Parameters.AddWithValue("Login", user.Login);
-        var userCount = (long)await checkUserCommand.ExecuteScalarAsync();
-
-        if (userCount > 0)
-        {
-            throw new ArgumentException($"User with username {user.Login} already exists.");
-        }
-        
-        using var insertUserCommand = new NpgsqlCommand("CALL geolens_custom_reg(@_email, @_login, @_is_blocked, @_address, @_phone, @_patronymic, @_name, @_surname, @_password, @_password_updated, @_registration_date)", connection);
+        using var insertUserCommand = new NpgsqlCommand("CALL geolens_registration(@_email, @_login, @_is_blocked, @_address, @_phone, @_patronymic, @_name, @_surname, @_password, @_password_updated, @_registration_date)", connection);
         
         insertUserCommand.Parameters.AddWithValue("_email", user.Email);
         insertUserCommand.Parameters.AddWithValue("_login", user.Login);
@@ -46,7 +37,7 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var command = new NpgsqlCommand("SELECT * FROM geolens_custom_auth(@Identifier)", connection);
+        using var command = new NpgsqlCommand("SELECT id, email, login, is_blocked, address, phone, patronymic, name, surname, password, password_updated, registration_date FROM geolens_authentication(@Identifier)", connection);
         command.Parameters.AddWithValue("Identifier", identifier);
 
         using var reader = await command.ExecuteReaderAsync();
@@ -80,7 +71,7 @@ public class UserRepository : IUserRepository
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             await connection.OpenAsync();
-            using (var getUserPermissionsCommand = new NpgsqlCommand("SELECT * FROM get_user_permissions(@UserId)", connection))
+            using (var getUserPermissionsCommand = new NpgsqlCommand("SELECT get_user_permissions(@UserId)", connection))
             {
                 getUserPermissionsCommand.Parameters.AddWithValue("UserId", userId);
 
@@ -102,7 +93,7 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var command = new NpgsqlCommand("SELECT * FROM get_user_by_refresh_token(@RefreshToken)", connection);
+        using var command = new NpgsqlCommand("SELECT id, email, login, is_blocked, address, phone, patronymic, name, surname, password, password_updated, registration_date FROM get_user_by_refresh_token(@RefreshToken)", connection);
         command.Parameters.AddWithValue("RefreshToken", refreshToken);
 
         using var reader = await command.ExecuteReaderAsync();
@@ -135,21 +126,12 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var findRefreshTokenCommand =
-            new NpgsqlCommand("SELECT expires FROM refresh_tokens WHERE refresh_token = @RefreshToken", connection);
-        findRefreshTokenCommand.Parameters.AddWithValue("RefreshToken", refreshToken);
+        using var command = new NpgsqlCommand("SELECT is_valid_refresh_token(@RefreshToken)", connection);
+        command.Parameters.AddWithValue("RefreshToken", refreshToken);
 
-        using var reader = findRefreshTokenCommand.ExecuteReader();
-        if (reader.Read())
-        {
-            var expires = reader.GetDateTime(0);
-            if (expires > DateTime.Now)
-            {
-                return true;
-            }
-        }
+        var result = await command.ExecuteScalarAsync();
 
-        return false;
+        return result != null && (bool)result;
     }
     
     public async Task SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
@@ -157,7 +139,7 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var saveRefreshTokenCommand = new NpgsqlCommand("CALL save_refresh_token(@_user_id, @_refresh_token, @_expires)", connection);
+        using var saveRefreshTokenCommand = new NpgsqlCommand("CALL add_refresh_token(@_user_id, @_refresh_token, @_expires)", connection);
 
         saveRefreshTokenCommand.Parameters.AddWithValue("_user_id", userId);
         saveRefreshTokenCommand.Parameters.AddWithValue("_refresh_token", refreshToken.Token);
@@ -171,7 +153,7 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var removeRefreshTokenCommand = new NpgsqlCommand("CALL remove_refresh_token(@_refresh_token)", connection);
+        using var removeRefreshTokenCommand = new NpgsqlCommand("CALL delete_refresh_token(@_refresh_token)", connection);
 
         removeRefreshTokenCommand.Parameters.AddWithValue("_refresh_token", oldToken);
 
@@ -180,24 +162,12 @@ public class UserRepository : IUserRepository
     public async Task BlockUser(int userId)
     {
         using var connection = new NpgsqlConnection(_connectionString);
-        using var command = new NpgsqlCommand("UPDATE users SET is_blocked = true WHERE id = @UserId", connection);
         await connection.OpenAsync();
 
+        using var command = new NpgsqlCommand("CALL geolens_block_user(@UserId)", connection);
         command.Parameters.AddWithValue("UserId", userId);
 
         await command.ExecuteNonQueryAsync();
-    }
-    public async Task<bool> UserExists(int userId)
-    {
-        using var connection = new NpgsqlConnection(_connectionString);
-        using var command = new NpgsqlCommand("SELECT COUNT(*) FROM users WHERE id = @UserId", connection);
-        await connection.OpenAsync();
-
-        command.Parameters.AddWithValue("UserId", userId);
-
-        var userCount = (long)await command.ExecuteScalarAsync();
-
-        return userCount > 0;
     }
     
     public async Task RemoveRefreshTokens(int userId)
@@ -209,5 +179,25 @@ public class UserRepository : IUserRepository
         command.Parameters.AddWithValue("UserId", userId);
 
         await command.ExecuteNonQueryAsync();
+    }
+    public async Task<bool> CheckIfUserExistsByUserId(int userId)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var command = new NpgsqlCommand("SELECT exists_user_by_user_id(@UserId)", connection);
+        command.Parameters.AddWithValue("UserId", userId);
+
+        return (bool)await command.ExecuteScalarAsync();
+    }
+    public async Task<bool> CheckIfUserExistsByLogin(string login)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var checkUserCommand = new NpgsqlCommand("SELECT exists_user_by_login(@Login)", connection);
+        checkUserCommand.Parameters.AddWithValue("Login", login);
+    
+        return (bool)await checkUserCommand.ExecuteScalarAsync();
     }
 }

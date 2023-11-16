@@ -41,6 +41,12 @@ public class AuthService : IAuthService
 
         user.Password = HashPassword(request.Password);
 
+        var checkIfUserExistsByLogin = await _userRepository.CheckIfUserExistsByLogin(request.Login);
+        if (checkIfUserExistsByLogin)
+        {
+            return null;
+        }
+
         await _userRepository.RegisterUser(user);
         
         return await Login(new AuthenticateRequest { Login = request.Login, Password = request.Password });
@@ -148,7 +154,7 @@ public class AuthService : IAuthService
         var refreshToken = new RefreshToken
         {
             Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(64)),
-            Expires = DateTime.Now.AddDays(5)
+            Expires = DateTime.Now.AddMinutes(2)
         };
 
         return refreshToken;

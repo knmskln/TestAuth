@@ -12,7 +12,7 @@ public class UserService : IUserService
         _userRepository = userRepository;
     }
     public async Task<string> BlockUser(BlockUserRequest request){
-        var userExists = await _userRepository.UserExists(request.UserId);
+        var userExists = await _userRepository.CheckIfUserExistsByUserId(request.UserId);
         if (!userExists)
         {
             return "User does not exist.";

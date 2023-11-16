@@ -12,6 +12,7 @@ public interface IUserRepository
     Task SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken);
     Task RemoveRefreshTokenFromDatabase(string oldToken);
     Task BlockUser(int userId);
-    Task<bool> UserExists(int userId);
     Task RemoveRefreshTokens(int userId);
+    Task<bool> CheckIfUserExistsByUserId(int userId);
+    Task<bool> CheckIfUserExistsByLogin(string login);
 }

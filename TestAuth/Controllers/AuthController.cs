@@ -48,7 +48,12 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
         var response = await _authenticationService.Register(request);
-
+        
+        if (response == null)
+        {
+            return BadRequest($"Unable to register user {request.Login}");
+        }
+        
         return Ok(response);
     }
    

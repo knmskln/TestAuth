@@ -74,10 +74,6 @@ create table public.group_permissions
             references public.permissions
 );
 
--- Вставка данных в таблицу groups
-INSERT INTO groups (name) VALUES ('Работа с картой');
-INSERT INTO groups (name) VALUES ('Работа с пользователями');
-
 -- Вставка данных в таблицу permissions
 INSERT INTO permissions (name) VALUES ('Добавить пользователя');
 INSERT INTO permissions (name) VALUES ('Удалить пользователя');
@@ -87,39 +83,51 @@ INSERT INTO permissions (name) VALUES ('Добавить Гео объект');
 INSERT INTO permissions (name) VALUES ('Удалить Гео объект');
 INSERT INTO permissions (name) VALUES ('Изменить Гео объект');
 
-INSERT INTO group_permissions (group_id, permission_id)
-SELECT
-    (SELECT id FROM groups WHERE name = 'Работа с пользователями'),
-    id
-FROM permissions
-WHERE name IN ('Добавить пользователя', 'Удалить пользователя', 'Изменить пользователя', 'Просмотреть пользователя');
-
-INSERT INTO group_permissions (group_id, permission_id)
-SELECT
-    (SELECT id FROM groups WHERE name = 'Работа с картой'),
-    id
-FROM permissions
-WHERE name IN ('Добавить Гео объект', 'Удалить Гео объект', 'Изменить Гео объект');
-
-INSERT INTO user_groups (user_id, group_id)
-VALUES (1, 2);
-
 INSERT INTO user_permissions (user_id, permission_id)
-VALUES (1, 2);
+VALUES (6, 5);
 
 UPDATE users
 SET is_blocked = false
 WHERE id = 6;
 
-CREATE OR REPLACE FUNCTION geolens_custom_auth(identifier text)
-    RETURNS SETOF users
+CREATE OR REPLACE FUNCTION geolens_authentication(_identifier text)
+    RETURNS TABLE (
+        id int,
+        email text,
+        login text,
+        is_blocked boolean,
+        address text,
+        phone varchar(20),
+        patronymic text,
+        name text,
+        surname text,
+        password text,
+        password_updated timestamp,
+        registration_date timestamp
+    )
 LANGUAGE SQL
 AS $$
-    SELECT * FROM users us
-    WHERE us.login = identifier OR us.email = identifier;
+    SELECT
+        us.id,
+        us.email,
+        us.login,
+        us.is_blocked,
+        us.address,
+        us.phone,
+        us.patronymic,
+        us.name,
+        us.surname,
+        us.password,
+        us.password_updated,
+        us.registration_date
+    FROM
+        users us
+    WHERE
+        us.login = _identifier OR us.email = _identifier;
 $$;
 
-CREATE OR REPLACE PROCEDURE geolens_custom_reg(
+
+CREATE OR REPLACE PROCEDURE geolens_registration(
     _email text,
     _login text,
     _is_blocked boolean,
@@ -138,12 +146,41 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION get_user_by_refresh_token(_refresh_token text)
-	RETURNS SETOF users					
-LANGUAGE SQL
+    RETURNS TABLE (
+        id INT,
+        email TEXT,
+        login TEXT,
+        is_blocked BOOLEAN,
+        address TEXT,
+        phone VARCHAR(20),
+        patronymic TEXT,
+        name TEXT,
+        surname TEXT,
+        password TEXT,
+        password_updated TIMESTAMP,
+        registration_date TIMESTAMP
+    )
+    LANGUAGE SQL
 AS $$
-	SELECT * FROM USERS us
-	WHERE us.id = (SELECT user_id FROM  refresh_tokens WHERE refresh_token = _refresh_token)
+    SELECT
+        us.id,
+        us.email,
+        us.login,
+        us.is_blocked,
+        us.address,
+        us.phone,
+        us.patronymic,
+        us.name,
+        us.surname,
+        us.password,
+        us.password_updated,
+        us.registration_date
+    FROM
+        USERS us
+    WHERE
+        us.id = (SELECT user_id FROM  refresh_tokens WHERE refresh_token = _refresh_token);
 $$;
+
 
 CREATE OR REPLACE FUNCTION get_user_permissions(_user_id INT)
 RETURNS SETOF INT
@@ -152,7 +189,7 @@ AS $$
     SELECT permission_id FROM user_permissions WHERE user_id = _user_id;
 $$;
 
-CREATE OR REPLACE PROCEDURE save_refresh_token(
+CREATE OR REPLACE PROCEDURE add_refresh_token(
     _user_id INT,
     _refresh_token text,
     _expires timestamp without time zone)
@@ -162,9 +199,41 @@ AS $$
     VALUES (_user_id, _refresh_token, _expires);
 $$;
 
-CREATE OR REPLACE PROCEDURE remove_refresh_token(
+CREATE OR REPLACE PROCEDURE delete_refresh_token(
     _refresh_token text)
 LANGUAGE SQL
 AS $$
     DELETE FROM refresh_tokens WHERE refresh_token = _refresh_token;
+$$;
+
+CREATE OR REPLACE FUNCTION exists_user_by_login(_login text)
+RETURNS BOOLEAN
+LANGUAGE SQL
+AS $$
+    SELECT EXISTS (SELECT 1 FROM users WHERE login = _login);
+$$;
+
+CREATE OR REPLACE FUNCTION exists_user_by_user_id(_user_id int)
+RETURNS BOOLEAN
+LANGUAGE SQL
+AS $$
+    SELECT EXISTS (SELECT 1 FROM users WHERE id = _user_id);
+$$;
+
+CREATE OR REPLACE FUNCTION is_valid_refresh_token(_refresh_token text)
+    RETURNS BOOLEAN
+    LANGUAGE SQL
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM refresh_tokens
+        WHERE refresh_token = _refresh_token
+          AND expires > NOW()
+    );
+$$;
+
+CREATE OR REPLACE PROCEDURE geolens_block_user(_user_id INT)
+LANGUAGE SQL
+AS $$
+    UPDATE users SET is_blocked = true WHERE id = _user_id;
 $$;

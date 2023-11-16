@@ -4,7 +4,6 @@ namespace TestAuth.Payload.Response;
 
 public class AuthenticateResponse
 {
-    //мб всего юзера
     public int UserId { get; set; }
     public bool IsBlocked { get; set; }
     public string Token { get; set; }
