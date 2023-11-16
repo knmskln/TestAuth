@@ -154,7 +154,7 @@ public class AuthService : IAuthService
         var refreshToken = new RefreshToken
         {
             Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(64)),
-            Expires = DateTime.Now.AddMinutes(2)
+            Expires = DateTime.Now.AddDays(5)
         };
 
         return refreshToken;

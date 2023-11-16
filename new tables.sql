@@ -1,4 +1,4 @@
-create table public.users
+create table users
 (
     id                serial
         primary key,
@@ -19,21 +19,21 @@ create table public.users
             unique
 );
  
-create table public.permissions
+create table permissions
 (
     id   serial
         primary key,
     name varchar(255) not null
 );
  
-create table public.groups
+create table groups
 (
     id   serial
         primary key,
     name varchar(255) not null
 );
  
-create table public.user_groups
+create table user_groups
 (
     group_id integer not null
         constraint user_groups_groups_id_fk
@@ -43,7 +43,7 @@ create table public.user_groups
             references public.users
 );
  
-create table public.refresh_tokens
+create table refresh_tokens
 (
     user_id       integer   not null
         constraint refresh_tokens_users_id_fk
@@ -54,7 +54,7 @@ create table public.refresh_tokens
     expires       timestamp not null
 );
  
-create table public.user_permissions
+create table user_permissions
 (
     permission_id integer not null
         constraint user_permissions_permissions_id_fk
@@ -64,7 +64,7 @@ create table public.user_permissions
             references public.users
 );
 
-create table public.group_permissions
+create table group_permissions
 (
     group_id      integer not null
         constraint group_permissions_groups_id_fk
@@ -84,11 +84,11 @@ INSERT INTO permissions (name) VALUES ('Удалить Гео объект');
 INSERT INTO permissions (name) VALUES ('Изменить Гео объект');
 
 INSERT INTO user_permissions (user_id, permission_id)
-VALUES (6, 5);
+VALUES (4, 7);
 
 UPDATE users
 SET is_blocked = false
-WHERE id = 6;
+WHERE id = 4;
 
 CREATE OR REPLACE FUNCTION geolens_authentication(_identifier text)
     RETURNS TABLE (
@@ -199,11 +199,17 @@ AS $$
     VALUES (_user_id, _refresh_token, _expires);
 $$;
 
-CREATE OR REPLACE PROCEDURE delete_refresh_token(
+CREATE OR REPLACE PROCEDURE delete_refresh_token_by_refresh_token(
     _refresh_token text)
 LANGUAGE SQL
 AS $$
     DELETE FROM refresh_tokens WHERE refresh_token = _refresh_token;
+$$;
+
+CREATE OR REPLACE PROCEDURE delete_refresh_tokens_by_user_id(_user_id INT)
+LANGUAGE SQL
+AS $$
+    DELETE FROM refresh_tokens WHERE user_id = _user_id;
 $$;
 
 CREATE OR REPLACE FUNCTION exists_user_by_login(_login text)

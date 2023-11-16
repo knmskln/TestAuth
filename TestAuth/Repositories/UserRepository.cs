@@ -153,7 +153,7 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var removeRefreshTokenCommand = new NpgsqlCommand("CALL delete_refresh_token(@_refresh_token)", connection);
+        using var removeRefreshTokenCommand = new NpgsqlCommand("CALL delete_refresh_token_by_refresh_token(@_refresh_token)", connection);
 
         removeRefreshTokenCommand.Parameters.AddWithValue("_refresh_token", oldToken);
 
@@ -173,9 +173,9 @@ public class UserRepository : IUserRepository
     public async Task RemoveRefreshTokens(int userId)
     {
         using var connection = new NpgsqlConnection(_connectionString);
-        using var command = new NpgsqlCommand("DELETE FROM refresh_tokens WHERE user_id = @UserId", connection);
         await connection.OpenAsync();
 
+        using var command = new NpgsqlCommand("CALL delete_refresh_tokens_by_user_id(@UserId)", connection);
         command.Parameters.AddWithValue("UserId", userId);
 
         await command.ExecuteNonQueryAsync();
