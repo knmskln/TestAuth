@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using TestAuth.Payload.Request;
 using TestAuth.Repositories;
 
@@ -11,15 +12,15 @@ public class UserService : IUserService
     {
         _userRepository = userRepository;
     }
-    public async Task<string> BlockUser(BlockUserRequest request){
-        var userExists = await _userRepository.CheckIfUserExistsByUserId(request.UserId);
+    public async Task<IActionResult> DisableUser(int userId){
+        var userExists = await _userRepository.IsUserExistByUserId(userId);
         if (!userExists)
         {
-            return "User does not exist.";
+            return new NotFoundResult();
         }
-        await _userRepository.BlockUser(request.UserId);
-        await _userRepository.RemoveRefreshTokens(request.UserId);
+        await _userRepository.UpdateUserDisable(userId);
+        await _userRepository.DeleteRefreshTokensByUserId(userId);
 
-        return "User blocked successfully.";
+        return new OkResult();
     }
 }

@@ -4,10 +4,10 @@ namespace TestAuth.Helpers;
 
 public class PermissionRequirement : IAuthorizationRequirement
 {
-    public string PermissionName { get; }
+    public string PermissionId { get; }
 
-    public PermissionRequirement(string permissionName)
+    public PermissionRequirement(string permissionId)
     {
-        PermissionName = permissionName;
+        PermissionId = permissionId;
     }
 }

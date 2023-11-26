@@ -16,7 +16,7 @@ public class UserRepository : IUserRepository
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var insertUserCommand = new NpgsqlCommand("CALL geolens_registration(@_email, @_login, @_is_blocked, @_address, @_phone, @_patronymic, @_name, @_surname, @_password, @_password_updated, @_registration_date)", connection);
+        using var insertUserCommand = new NpgsqlCommand("CALL add_user_registration(@_email, @_login, @_is_blocked, @_address, @_phone, @_patronymic, @_name, @_surname, @_password, @_password_updated, @_registration_date)", connection);
         
         insertUserCommand.Parameters.AddWithValue("_email", user.Email);
         insertUserCommand.Parameters.AddWithValue("_login", user.Login);
@@ -32,12 +32,12 @@ public class UserRepository : IUserRepository
 
         await insertUserCommand.ExecuteNonQueryAsync();
     }
-    public async Task<User> GetUserByLogin(string identifier)
+    public async Task<User?> GetUserByLogin(string identifier)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var command = new NpgsqlCommand("SELECT id, email, login, is_blocked, address, phone, patronymic, name, surname, password, password_updated, registration_date FROM geolens_authentication(@Identifier)", connection);
+        using var command = new NpgsqlCommand("SELECT id, email, login, is_blocked, address, phone, patronymic, name, surname, password, password_updated, registration_date FROM get_user_authentication(@Identifier)", connection);
         command.Parameters.AddWithValue("Identifier", identifier);
 
         using var reader = await command.ExecuteReaderAsync();
@@ -65,7 +65,7 @@ public class UserRepository : IUserRepository
         return null;
     }
 
-    public async Task<List<int>> GetPermissionsForUser(int userId)
+    public async Task<List<int>> GetUserPermissions(int userId)
     {
         List<int> permissions = new List<int>();
         using (var connection = new NpgsqlConnection(_connectionString))
@@ -88,7 +88,7 @@ public class UserRepository : IUserRepository
         return permissions;
     }
     
-    public async Task<User> GetUserByRefreshToken(string refreshToken)
+    public async Task<User?> GetUserByRefreshToken(string refreshToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -121,12 +121,12 @@ public class UserRepository : IUserRepository
         return null;
     }
     
-    public async Task<bool> IsValidRefreshToken(string refreshToken)
+    public async Task<bool> IsRefreshTokenValid(string refreshToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var command = new NpgsqlCommand("SELECT is_valid_refresh_token(@RefreshToken)", connection);
+        using var command = new NpgsqlCommand("SELECT is_refresh_token_valid(@RefreshToken)", connection);
         command.Parameters.AddWithValue("RefreshToken", refreshToken);
 
         var result = await command.ExecuteScalarAsync();
@@ -134,7 +134,7 @@ public class UserRepository : IUserRepository
         return result != null && (bool)result;
     }
     
-    public async Task SaveRefreshTokenToDatabase(int userId, RefreshToken refreshToken)
+    public async Task AddRefreshToken(int userId, RefreshToken refreshToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -148,7 +148,7 @@ public class UserRepository : IUserRepository
         await saveRefreshTokenCommand.ExecuteNonQueryAsync();
     }
 
-    public async Task RemoveRefreshTokenFromDatabase(string oldToken)
+    public async Task DeleteRefreshTokenByRefreshToken(string oldToken)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -159,18 +159,18 @@ public class UserRepository : IUserRepository
 
         await removeRefreshTokenCommand.ExecuteNonQueryAsync();
     }
-    public async Task BlockUser(int userId)
+    public async Task UpdateUserDisable(int userId)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var command = new NpgsqlCommand("CALL geolens_block_user(@UserId)", connection);
+        using var command = new NpgsqlCommand("CALL update_user_disable(@UserId)", connection);
         command.Parameters.AddWithValue("UserId", userId);
 
         await command.ExecuteNonQueryAsync();
     }
     
-    public async Task RemoveRefreshTokens(int userId)
+    public async Task DeleteRefreshTokensByUserId(int userId)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -180,22 +180,22 @@ public class UserRepository : IUserRepository
 
         await command.ExecuteNonQueryAsync();
     }
-    public async Task<bool> CheckIfUserExistsByUserId(int userId)
+    public async Task<bool> IsUserExistByUserId(int userId)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var command = new NpgsqlCommand("SELECT exists_user_by_user_id(@UserId)", connection);
+        using var command = new NpgsqlCommand("SELECT is_user_exist_by_user_id(@UserId)", connection);
         command.Parameters.AddWithValue("UserId", userId);
 
         return (bool)await command.ExecuteScalarAsync();
     }
-    public async Task<bool> CheckIfUserExistsByLogin(string login)
+    public async Task<bool> IsUserExistByLogin(string login)
     {
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        using var checkUserCommand = new NpgsqlCommand("SELECT exists_user_by_login(@Login)", connection);
+        using var checkUserCommand = new NpgsqlCommand("SELECT is_user_exist_by_login(@Login)", connection);
         checkUserCommand.Parameters.AddWithValue("Login", login);
     
         return (bool)await checkUserCommand.ExecuteScalarAsync();

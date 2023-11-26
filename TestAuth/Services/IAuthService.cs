@@ -5,7 +5,7 @@ namespace TestAuth.Services;
 
 public interface IAuthService
 {
-    Task<AuthenticateResponse> Register(RegisterRequest request);
-    Task<AuthenticateResponse> Login(AuthenticateRequest request);
-    Task<AuthenticateResponse> RefreshToken(RefreshTokenRequest refreshTokenRequest);
+    Task<AuthenticateResponse?> Register(RegisterRequest request);
+    Task<AuthenticateResponse?> Login(AuthenticateRequest request);
+    Task<AuthenticateResponse?> RefreshToken(string refreshTokenRequest);
 }

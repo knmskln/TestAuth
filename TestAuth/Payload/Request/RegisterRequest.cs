@@ -19,4 +19,15 @@ public class RegisterRequest
     public string? Address { get; set; }
     [Phone]
     public string? Phone { get; set; }
+    public RegisterRequest(string login, string email, string password, string surname, string name, string? patronymic, string? address, string? phone)
+    {
+        Login = login;
+        Email = email;
+        Password = password;
+        Surname = surname;
+        Name = name;
+        Patronymic = patronymic;
+        Address = address;
+        Phone = phone;
+    }
 }

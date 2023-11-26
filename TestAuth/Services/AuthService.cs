@@ -23,7 +23,7 @@ public class AuthService : IAuthService
         _userRepository = userRepository;
     }
 
-    public async Task<AuthenticateResponse> Register(RegisterRequest request)
+    public async Task<AuthenticateResponse?> Register(RegisterRequest request)
     {
         var user = new User
         {
@@ -41,7 +41,7 @@ public class AuthService : IAuthService
 
         user.Password = HashPassword(request.Password);
 
-        var checkIfUserExistsByLogin = await _userRepository.CheckIfUserExistsByLogin(request.Login);
+        var checkIfUserExistsByLogin = await _userRepository.IsUserExistByLogin(request.Login);
         if (checkIfUserExistsByLogin)
         {
             return null;
@@ -52,7 +52,7 @@ public class AuthService : IAuthService
         return await Login(new AuthenticateRequest { Login = request.Login, Password = request.Password });
     }
 
-    public async Task<AuthenticateResponse> Login(AuthenticateRequest request)
+    public async Task<AuthenticateResponse?> Login(AuthenticateRequest request)
     {
         var user = await _userRepository.GetUserByLogin(request.Login);
         
@@ -63,7 +63,7 @@ public class AuthService : IAuthService
         
         if (user != null)
         {
-            var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
+            var userPermissions = await _userRepository.GetUserPermissions(user.Id);
 
             if (VerifyPassword(request.Password, user.Password))
             {
@@ -80,7 +80,7 @@ public class AuthService : IAuthService
 
                 var token = GetToken(authClaims);
                 var refreshToken = GenerateRefreshToken();
-                await _userRepository.SaveRefreshTokenToDatabase(user.Id, refreshToken);
+                await _userRepository.AddRefreshToken(user.Id, refreshToken);
 
                 return new AuthenticateResponse(user.Id, user.IsBlocked, new JwtSecurityTokenHandler().WriteToken(token), refreshToken);
             }
@@ -89,15 +89,15 @@ public class AuthService : IAuthService
         return null;
     }
 
-    public async Task<AuthenticateResponse> RefreshToken(RefreshTokenRequest refreshTokenRequest)
+    public async Task<AuthenticateResponse?> RefreshToken(string refreshTokenRequest)
     {
-        var isValid = await _userRepository.IsValidRefreshToken(refreshTokenRequest.RefreshToken);
+        var isValid = await _userRepository.IsRefreshTokenValid(refreshTokenRequest);
         
         if (isValid)
         {
-            var user = await _userRepository.GetUserByRefreshToken(refreshTokenRequest.RefreshToken);
+            var user = await _userRepository.GetUserByRefreshToken(refreshTokenRequest);
             
-            var userPermissions = await _userRepository.GetPermissionsForUser(user.Id);
+            var userPermissions = await _userRepository.GetUserPermissions(user.Id);
 
             var authClaims = new List<Claim>
             {
@@ -114,9 +114,9 @@ public class AuthService : IAuthService
 
             var newRefreshToken = GenerateRefreshToken();
             
-            await _userRepository.SaveRefreshTokenToDatabase(user.Id, newRefreshToken);
+            await _userRepository.AddRefreshToken(user.Id, newRefreshToken);
 
-            await _userRepository.RemoveRefreshTokenFromDatabase(refreshTokenRequest.RefreshToken);
+            await _userRepository.DeleteRefreshTokenByRefreshToken(refreshTokenRequest);
 
             return new AuthenticateResponse(user.Id, user.IsBlocked,new JwtSecurityTokenHandler().WriteToken(newToken),
                 newRefreshToken);

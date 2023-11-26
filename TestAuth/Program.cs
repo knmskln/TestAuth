@@ -19,7 +19,7 @@ builder.Services.AddControllers();
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AddUser", policy =>
+    options.AddPolicy("DisableUser", policy =>
     {
         policy.Requirements.Add(new PermissionRequirement("1"));
     });

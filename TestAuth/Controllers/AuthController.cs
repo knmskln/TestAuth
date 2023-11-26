@@ -62,7 +62,7 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(AuthenticateResponse))]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest refreshTokenRequest)
+    public async Task<IActionResult> RefreshToken(string refreshTokenRequest)
     {
         var response = await _authenticationService.RefreshToken(refreshTokenRequest);
 
